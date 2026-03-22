@@ -82,9 +82,13 @@ export function useChangeStore() {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   }, []);
 
-  // Caricamento dati iniziale
+  // Caricamento dati — aspetta che la sessione sia attiva
   useEffect(() => {
     async function load() {
+      // Assicurati che ci sia una sessione valida prima di fare le query
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const [changesRes, commentsRes, incidentsRes, fpRes, feRes] = await Promise.all([
         supabase.from('changes').select('*').order('created_at', { ascending: false }),
         supabase.from('change_comments').select('*').order('created_at'),
@@ -103,26 +107,23 @@ export function useChangeStore() {
       setFreezeEvents((feRes.data ?? []).map(dbToFreezeEvent));
       setDataLoaded(true);
     }
+
+    // Carica subito se c'è già una sessione, altrimenti aspetta il login
     load();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') load();
+      if (event === 'SIGNED_OUT') {
+        setChanges([]);
+        setIncidents([]);
+        setFreezePeriods([]);
+        setFreezeEvents([]);
+        setDataLoaded(false);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Realtime: subscribe ai cambiamenti nella tabella changes
-  useEffect(() => {
-    const channel = supabase
-      .channel('changes-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'changes' }, async () => {
-        // Ricarica tutto in caso di update remoto
-        const [changesRes, commentsRes] = await Promise.all([
-          supabase.from('changes').select('*').order('created_at', { ascending: false }),
-          supabase.from('change_comments').select('*').order('created_at'),
-        ]);
-        const comments = (commentsRes.data ?? []) as DbComment[];
-        setChanges(((changesRes.data ?? []) as DbChange[]).map(c => dbToChange(c, comments)));
-      })
-      .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
 
   // ── Azioni ───────────────────────────────────────────────
 
