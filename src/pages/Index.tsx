@@ -18,7 +18,7 @@ import { ChangeDetailModal } from '@/components/ChangeDetailModal';
 import { NewChangeModal } from '@/components/NewChangeModal';
 
 const Index = () => {
-  const { user, canSeeChange, hasRole } = useAuth();
+  const { user, loading: authLoading, canSeeChange, hasRole } = useAuth();
   const [activePage, setActivePage] = useState('dashboard');
   const [detailChangeId, setDetailChangeId] = useState<string | null>(null);
   const [showNewChange, setShowNewChange] = useState(false);
@@ -26,6 +26,12 @@ const Index = () => {
 
   const store = useChangeStore();
   const { changes, notifications, markAllRead } = store;
+
+  // Wrapper: inietta nome e avatar dell'utente loggato nel commento
+  const addComment = (changeId: string, text: string) => {
+    if (!user) return;
+    store.addComment(changeId, text, user.name, user.avatar);
+  };
 
   // Filter changes based on role
   const visibleChanges = useMemo(() => {
@@ -36,6 +42,17 @@ const Index = () => {
   const changeCount = visibleChanges.filter(c => c.status !== 'Chiuso').length;
   const approvalCount = visibleChanges.filter(c => c.status === 'In Review').length;
   const detailChange = detailChangeId ? changes.find(c => c.id === detailChangeId) : null;
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="font-mono text-2xl font-bold text-primary mb-2">ChangeFlow</div>
+          <div className="text-[12px] text-text-3">Caricamento...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return <LoginPage />;
 
@@ -109,7 +126,7 @@ const Index = () => {
         <ChangeDetailModal
           change={detailChange} changes={changes} onClose={() => setDetailChangeId(null)}
           onAdvance={store.advanceStatus} onReject={store.rejectChange} onReopen={store.reopenChange}
-          onPromote={store.promoteChange} onAddComment={store.addComment}
+          onPromote={store.promoteChange} onAddComment={addComment}
         />
       )}
       {showNewChange && <NewChangeModal changes={changes} incidents={store.incidents} onClose={() => setShowNewChange(false)} onSubmit={store.addChange as any} />}
